@@ -1,0 +1,80 @@
+name: "WSP Verify — Model Patch & Regression CI Gate"
+description: "Cryptographic .wsp v2.1 verification, SPDX license & safety-layer check (fast-ci, free) and multi-seed WSP-Holdout regression attestation (full-eval via Supernova)."
+author: "WSP Hub (wsphub.dev)"
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  mode:
+    description: "Execution mode: 'fast-ci' (free <30s deterministic gate) or 'full-eval' (metered multi-seed evaluation via Supernova Async Escrow)"
+    required: false
+    default: "fast-ci"
+  hf-repo-id:
+    description: "Target base Hugging Face model repository ID (e.g. Qwen/Qwen3.5-0.8B)"
+    required: true
+  base-revision:
+    description: "Pinned 40-char Hugging Face git commit SHA of the base checkpoint"
+    required: true
+  patch-path:
+    description: "Path to candidate .wsp v2.1 archive"
+    required: false
+    default: ""
+  param-count-b:
+    description: "Model parameter count in billions (e.g. 0.8, 7.0) for full-eval tier routing"
+    required: false
+    default: "0.8"
+  supernova-api-key:
+    description: "Supernova MCP API key (required only when mode == 'full-eval')"
+    required: false
+    default: ""
+  wsp-auth-token:
+    description: "Optional WSP Hub publisher auth token"
+    required: false
+    default: ""
+  wsphub-api-url:
+    description: "WSP Hub Registry API base URL"
+    required: false
+    default: "https://api.wsphub.dev"
+  supernova-gateway-url:
+    description: "Supernova MCP Gateway URL"
+    required: false
+    default: "https://supernova.cool/api/v1/mcp/"
+
+outputs:
+  verified:
+    description: "'true' if all gates passed, 'false' otherwise"
+    value: ${{ steps.wsp_gate.outputs.verified }}
+  attestation_hash:
+    description: "SHA-256 pre-registration / attestation entry hash from wsphub.dev transparency log"
+    value: ${{ steps.wsp_gate.outputs.attestation_hash }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install WSP Verify runtime dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        python -m pip install "cryptography>=42.0.0" "numpy>=1.26.0" "safetensors>=0.4.2" "httpx>=0.27.0" "pydantic>=2.6.0"
+
+    - name: Execute WSP Verify Gate
+      id: wsp_gate
+      shell: bash
+      env:
+        WSP_CI_MODE: ${{ inputs.mode }}
+        WSP_HF_REPO_ID: ${{ inputs.hf-repo-id }}
+        WSP_BASE_REVISION: ${{ inputs.base-revision }}
+        WSP_PATCH_PATH: ${{ inputs.patch-path }}
+        WSP_PARAM_COUNT_B: ${{ inputs.param-count-b }}
+        SUPERNOVA_API_KEY: ${{ inputs.supernova-api-key }}
+        WSP_AUTH_TOKEN: ${{ inputs.wsp-auth-token }}
+        WSPHUB_API_URL: ${{ inputs.wsphub-api-url }}
+        SUPERNOVA_GATEWAY_URL: ${{ inputs.supernova-gateway-url }}
+      run: |
+        python "${{ github.action_path }}/src/run_ci.py"
